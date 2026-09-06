@@ -1,0 +1,63 @@
+# Sample 5G NR Protocol Log — Multiple Failure Scenarios
+# Format: TIMESTAMP [LAYER] MESSAGE
+
+2024-01-15 10:23:38.000 [SYS] gNB-001 serving cell PCI=42, ARFCN=634000 (3.5GHz NR)
+2024-01-15 10:23:39.000 [SYS] UE-12345 IMSI=001011234567890 attached to cell PCI=42
+
+# ─── RACH Failure ─────────────────────────────────────────────────────────────
+2024-01-15 10:23:40.001 [RRC] UE-12345 RRCSetupRequest sent to gNB-001
+2024-01-15 10:23:40.100 [MAC] UE-12345 RACH procedure started preamble=42 RA-RNTI=0x1234
+2024-01-15 10:23:40.200 [MAC] UE-12345 RAR not received, retry 1/4
+2024-01-15 10:23:40.400 [MAC] UE-12345 RAR not received, retry 2/4
+2024-01-15 10:23:40.600 [MAC] UE-12345 RAR not received, retry 3/4
+2024-01-15 10:23:40.800 [MAC] UE-12345 RACH failure preambleTransMax reached (4/4)
+2024-01-15 10:23:40.900 [RRC] UE-12345 T300 started (1000ms)
+
+# ─── RRC Setup Failure ────────────────────────────────────────────────────────
+2024-01-15 10:23:41.901 [RRC] UE-12345 RRCSetupFailure cause=t300-Expiry gNB=gNB-001
+2024-01-15 10:23:42.000 [NAS] UE-12345 5GMM Registration Request sent attempt=1
+
+# ─── HARQ + RLC Failure ───────────────────────────────────────────────────────
+2024-01-15 10:23:42.500 [MAC] UE-12345 HARQ max retransmissions reached DRB-1 NDI=0
+2024-01-15 10:23:42.600 [RLC] UE-12345 AM mode maxRetxThreshold=4 reached on SRB1
+2024-01-15 10:23:42.700 [RLC] UE-12345 RLC SDU discarded t-Reordering expired SN=1024
+
+# ─── Radio Link Failure ───────────────────────────────────────────────────────
+2024-01-15 10:23:43.000 [RRC] UE-12345 N310=3 out-of-sync indications received
+2024-01-15 10:23:43.001 [RRC] UE-12345 T310 timer started (1000ms) N311=0
+2024-01-15 10:23:44.002 [RRC] UE-12345 T310 Expiry radioLinkFailure declared
+2024-01-15 10:23:44.100 [RRC] UE-12345 RRC Re-establishment initiated cause=radioLinkFailure
+
+# ─── Re-establishment Failure ─────────────────────────────────────────────────
+2024-01-15 10:23:44.200 [RRC] UE-12345 RRCReestablishmentRequest sent to cell-002 PCI=55
+2024-01-15 10:23:44.300 [RRC] UE-12345 RRCReestablishmentReject received cause=contextNotFound
+2024-01-15 10:23:44.400 [RRC] UE-12345 T301 expired reestablishment failed
+
+# ─── NAS Failures ─────────────────────────────────────────────────────────────
+2024-01-15 10:23:44.500 [NAS] UE-12345 Registration Reject received cause=#22 (congestion)
+2024-01-15 10:23:44.600 [NAS] UE-12345 T3346 started (back-off timer active)
+2024-01-15 10:23:44.700 [NAS] UE-12345 PDU Session Establishment Failure cause=#27 (unknown DNN=internet2)
+
+# ─── NGAP / Core Network ──────────────────────────────────────────────────────
+2024-01-15 10:23:44.800 [NGAP] AMF → gNB-001 UEContextRelease cause=radio-connection-with-ue-lost UE-NGAP-ID=12345
+2024-01-15 10:23:44.900 [NGAP] gNB-001 HandoverRequired sent to AMF for UE-12345 target=gNB-002
+2024-01-15 10:23:45.000 [NGAP] AMF HandoverPreparationFailure cause=targetNotAllowed UE-12345
+
+# ─── PDCP Security Failure ────────────────────────────────────────────────────
+2024-01-15 10:23:45.100 [PDCP] UE-12345 Integrity verification failed SRB1 MAC-I mismatch expected=0xABCD got=0x1234
+2024-01-15 10:23:45.200 [PDCP] UE-12345 Ciphering error on DRB-1 algorithm=NEA2 key mismatch
+
+# ─── GTP Core Failure ─────────────────────────────────────────────────────────
+2024-01-15 10:23:45.300 [GTP] UPF-01 GTP Context Not Found TEID=0x1A2B3C4D cause=73
+2024-01-15 10:23:45.400 [GTP] UPF-01 N3 interface down gNB=gNB-001 tunnel lost
+
+# ─── Authentication Failure ───────────────────────────────────────────────────
+2024-01-15 10:23:45.500 [NAS] UE-12345 Authentication Failure MAC failure RAND mismatch
+2024-01-15 10:23:45.600 [NAS] AMF Authentication Reject sent cause=MAC failure
+
+# ─── Recovery on new cell ─────────────────────────────────────────────────────
+2024-01-15 10:24:00.000 [SYS] UE-12345 cell reselection to PCI=88 ARFCN=634000
+2024-01-15 10:24:00.500 [MAC] UE-12345 RACH success on cell-003 PCI=88
+2024-01-15 10:24:00.700 [RRC] UE-12345 RRCSetup received connection established PCI=88
+2024-01-15 10:24:01.000 [NAS] UE-12345 Registration Accept received
+2024-01-15 10:24:01.200 [NAS] UE-12345 PDU Session Established DNN=internet 5QI=9
