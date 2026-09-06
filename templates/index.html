@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3GPP Log Analyzer — AI-Powered RCA</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TOP NAVBAR
+═══════════════════════════════════════════════════════════════════════════ -->
+<nav class="navbar">
+  <div class="nav-brand">
+    <span class="nav-icon">📡</span>
+    <span class="nav-title">3GPP Log Analyzer</span>
+    <span class="nav-badge">AI-Powered RCA</span>
+  </div>
+  <div class="nav-actions">
+    <button class="btn btn-ghost btn-sm" id="btnStatus" onclick="checkStatus()">⚙ Status</button>
+    <button class="btn btn-ghost btn-sm" onclick="rebuildIndex()">🔄 Rebuild Index</button>
+    <a class="btn btn-ghost btn-sm" href="/docs" target="_blank">📖 API Docs</a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MAIN LAYOUT
+═══════════════════════════════════════════════════════════════════════════ -->
+<div class="app-layout">
+
+  <!-- ── LEFT PANEL: Upload + Results ──────────────────────────────────── -->
+  <div class="panel panel-left" id="panelLeft">
+
+    <!-- Upload Card -->
+    <div class="card upload-card">
+      <div class="card-header">
+        <span class="card-icon">📋</span>
+        <span>Log Input</span>
+        <div class="card-header-actions">
+          <button class="btn btn-xs btn-ghost" onclick="loadSampleLog()">Load Sample</button>
+        </div>
+      </div>
+      <div class="card-body">
+
+        <!-- Drag-drop zone -->
+        <div class="drop-zone" id="dropZone">
+          <div class="drop-zone-icon">📁</div>
+          <div class="drop-zone-text">Drop log file here or click to browse</div>
+          <div class="drop-zone-hint">Supports .log, .txt, .csv, .pcap, .pcapng</div>
+          <input type="file" id="fileInput" accept=".log,.txt,.csv,.out,.pcap,.pcapng" style="display:none" onchange="handleFileSelect(event)" />
+        </div>
+
+        <!-- Or paste text -->
+        <div class="separator"><span>OR</span></div>
+
+        <textarea
+          id="logInput"
+          class="log-textarea"
+          placeholder="Paste your 3GPP protocol logs here...
+Example:
+2024-01-15 10:23:45.123 [RRC] RRCSetupFailure cause=t300-Expiry
+2024-01-15 10:23:46.001 [NAS] Registration Reject cause=#22
+2024-01-15 10:23:46.500 [MAC] RACH failure, preambleTransMax reached"
+          rows="12"
+        ></textarea>
+
+        <div class="analyze-actions">
+          <div class="analyze-options">
+            <label class="toggle-label">
+              <input type="checkbox" id="chkFullRCA" checked />
+              <span class="toggle-slider"></span>
+              Full RCA (uses LLM)
+            </label>
+          </div>
+          <button class="btn btn-primary btn-lg" id="btnAnalyze" onclick="analyzeLog()">
+            <span id="analyzeIcon">🔍</span>
+            <span id="analyzeText">Analyze Logs</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="statusBar" class="status-bar hidden">
+      <div class="status-spinner"></div>
+      <span id="statusText">Analyzing...</span>
+    </div>
+
+    <!-- Results Panel -->
+    <div id="resultsPanel" class="results-panel hidden">
+
+      <!-- Summary Cards -->
+      <div class="summary-grid" id="summaryGrid"></div>
+
+      <!-- Failure Table -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">⚠️</span>
+          <span>Detected Failure Points</span>
+          <span class="badge badge-error" id="failureCount"></span>
+        </div>
+        <div class="card-body no-pad">
+          <div id="failureTable" class="failure-table-container"></div>
+        </div>
+      </div>
+
+      <!-- Chain Analysis -->
+      <div class="card" id="chainCard" style="display:none">
+        <div class="card-header">
+          <span class="card-icon">🔗</span>
+          <span>Failure Chain Analysis</span>
+        </div>
+        <div class="card-body" id="chainAnalysis"></div>
+      </div>
+
+      <!-- RCA Report -->
+      <div class="card rca-card" id="rcaCard" style="display:none">
+        <div class="card-header">
+          <span class="card-icon">📊</span>
+          <span>Root Cause Analysis Report</span>
+          <div class="card-header-actions">
+            <button class="btn btn-xs btn-ghost" onclick="copyRCA()">📋 Copy</button>
+            <button class="btn btn-xs btn-ghost" onclick="downloadRCA()">⬇ Download</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="rcaReport" class="rca-content"></div>
+        </div>
+      </div>
+
+    </div><!-- /resultsPanel -->
+
+  </div><!-- /panel-left -->
+
+  <!-- ── RIGHT PANEL: Chat Window ──────────────────────────────────────── -->
+  <div class="panel panel-right" id="panelRight">
+    <div class="chat-panel">
+
+      <div class="chat-header">
+        <div class="chat-header-info">
+          <span class="chat-avatar">🤖</span>
+          <div>
+            <div class="chat-title">3GPP Analysis Assistant</div>
+            <div class="chat-subtitle">Groq · openai/gpt-oss-20b · RAG · MCP</div>
+          </div>
+        </div>
+        <div class="chat-header-actions">
+          <button class="btn btn-xs btn-ghost" onclick="clearChat()" title="Clear conversation">🗑</button>
+          <button class="btn btn-xs btn-ghost" onclick="showMCPTools()" title="Show MCP Tools">🔧</button>
+        </div>
+      </div>
+
+      <!-- MCP Tools Panel (hidden by default) -->
+      <div id="mcpPanel" class="mcp-panel hidden">
+        <div class="mcp-panel-header">
+          Available MCP Tools
+          <button class="btn btn-xs btn-ghost" onclick="hideMCPTools()">✕</button>
+        </div>
+        <div id="mcpToolList" class="mcp-tool-list"></div>
+      </div>
+
+      <!-- Chat Messages -->
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-welcome">
+          <div class="welcome-icon">📡</div>
+          <div class="welcome-title">3GPP Log Analysis Assistant</div>
+          <div class="welcome-text">
+            Upload and analyze your log on the left panel first.<br/>
+            This assistant answers <strong>only</strong> about your uploaded log — no general questions.<br/>
+            After analysis, ask about specific failures, root causes, or recommended fixes.
+          </div>
+          <div class="quick-prompts" id="quickPrompts">
+            <button class="quick-btn" onclick="sendQuickPrompt('What failures were found in my log?')">What failures were found?</button>
+            <button class="quick-btn" onclick="sendQuickPrompt('What is the root cause of the failures in my log?')">What is the root cause?</button>
+            <button class="quick-btn" onclick="sendQuickPrompt('Which protocol layer failed first in my log?')">Which layer failed first?</button>
+            <button class="quick-btn" onclick="sendQuickPrompt('Explain the failure chain detected in my log')">Explain failure chain</button>
+            <button class="quick-btn" onclick="sendQuickPrompt('What are the recommended fixes for the failures in my log?')">Recommended fixes</button>
+            <button class="quick-btn" onclick="sendQuickPrompt('List all failure points with their 3GPP spec references from my log')">Failures with spec refs</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Typing Indicator -->
+      <div id="typingIndicator" class="typing-indicator hidden">
+        <div class="typing-dots">
+          <span></span><span></span><span></span>
+        </div>
+        <span class="typing-text">Analyzing with Groq LLM...</span>
+      </div>
+
+      <!-- Chat Input -->
+      <div class="chat-input-area">
+        <div class="chat-input-row">
+          <div class="input-wrapper">
+            <textarea
+              id="chatInput"
+              class="chat-input"
+              placeholder="Ask about your analyzed log — failures, root causes, fixes..."
+              rows="1"
+              onkeydown="handleChatKeydown(event)"
+              oninput="autoResizeTextarea(this)"
+            ></textarea>
+          </div>
+          <button class="btn btn-send" id="btnSend" onclick="sendChatMessage()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+        <div class="chat-input-footer">
+          <label class="toggle-label small">
+            <input type="checkbox" id="chkRAG" checked />
+            <span class="toggle-slider"></span>
+            Use 3GPP knowledge base (RAG)
+          </label>
+          <label class="toggle-label small">
+            <input type="checkbox" id="chkStream" checked />
+            <span class="toggle-slider"></span>
+            Stream response
+          </label>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- /panel-right -->
+
+</div><!-- /app-layout -->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MODAL: Status
+═══════════════════════════════════════════════════════════════════════════ -->
+<div id="statusModal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal('statusModal')"></div>
+  <div class="modal-box">
+    <div class="modal-header">
+      System Status
+      <button class="modal-close" onclick="closeModal('statusModal')">✕</button>
+    </div>
+    <div class="modal-body" id="statusModalBody">Loading...</div>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
