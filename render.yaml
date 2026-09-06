@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: 3gpp-log-analyzer
+    runtime: python
+    region: oregon
+    plan: free
+
+    # Build step — install all dependencies
+    buildCommand: pip install -r requirements.txt
+
+    # Start command — bind to Render's $PORT, single worker
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+
+    # Health check endpoint
+    healthCheckPath: /health
+
+    # All environment variables are set in the Render dashboard
+    # (listed below — do NOT hardcode secrets here)
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: GROQ_MODEL
+        value: groq/compound-mini
+      - key: CHROMA_DB_PATH
+        value: ./chroma_db
+      - key: KNOWLEDGE_BASE_PATH
+        value: ./knowledge_base
+      - key: EMBED_MODEL
+        value: all-MiniLM-L6-v2
+      # GROQ_API_KEY must be set manually in Render dashboard (secret)
