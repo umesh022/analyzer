@@ -9,3 +9,4 @@ python-dotenv
 httpx
 jinja2
 aiofiles
+dpkt
