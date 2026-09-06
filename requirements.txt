@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-multipart
+groq
+sentence-transformers
+numpy
+pydantic
+python-dotenv
+httpx
+jinja2
+aiofiles
