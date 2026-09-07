@@ -96,6 +96,16 @@ Example:
       <!-- Summary Cards -->
       <div class="summary-grid" id="summaryGrid"></div>
 
+      <!-- LLM pre-pass notice -->
+      <div id="prepassNotice" class="hidden" style="
+        background:rgba(188,140,255,.1);border:1px solid rgba(188,140,255,.35);
+        border-radius:8px;padding:10px 14px;font-size:.82rem;
+        color:#bc8cff;margin-bottom:0;">
+        🤖 <strong>LLM Pre-pass used:</strong> No regex patterns matched your log format —
+        Groq LLM read the raw log directly and extracted the failure points shown above.
+        Results are AI-inferred, not pattern-matched.
+      </div>
+
       <!-- Failure Table -->
       <div class="card">
         <div class="card-header">
