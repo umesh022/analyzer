@@ -7,6 +7,7 @@ If no log has been analyzed the assistant refuses to answer.
 
 import logging
 import json
+import asyncio
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -176,17 +177,21 @@ async def chat_message(request: ChatRequest):
     if not _has_analysis(request):
         return {"response": NO_LOG_MSG, "rag_used": False}
 
-    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    messages  = [{"role": m.role, "content": m.content} for m in request.messages]
     last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
 
-    rag_ctx   = _rag_query(last_user) if request.use_rag else ""
-    grounded  = _build_grounded_context(request, rag_ctx)
+    # Run RAG in thread pool so it doesn't block the event loop
+    loop    = asyncio.get_event_loop()
+    rag_ctx = await loop.run_in_executor(
+        None, _rag_query, last_user if request.use_rag else ""
+    )
+    grounded = _build_grounded_context(request, rag_ctx)
 
     try:
         from app.services.groq_llm import get_llm_service
         response_text = await get_llm_service().chat(
             messages=messages,
-            rag_context="",           # merged into grounded below
+            rag_context="",
             analysis_context=grounded,
         )
         return {"response": response_text, "rag_used": bool(rag_ctx)}
@@ -206,13 +211,19 @@ async def chat_stream(request: ChatRequest):
                                  headers={"Cache-Control": "no-cache",
                                           "X-Accel-Buffering": "no"})
 
-    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    messages  = [{"role": m.role, "content": m.content} for m in request.messages]
     last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
 
-    rag_ctx  = _rag_query(last_user) if request.use_rag else ""
+    # Run RAG in thread pool so it doesn't block the event loop
+    loop    = asyncio.get_event_loop()
+    rag_ctx = await loop.run_in_executor(
+        None, _rag_query, last_user if request.use_rag else ""
+    )
     grounded = _build_grounded_context(request, rag_ctx)
 
     async def event_generator():
+        # Send an immediate heartbeat token so Render doesn't 502
+        yield f"data: {json.dumps({'token': ''})}\n\n"
         try:
             from app.services.groq_llm import get_llm_service
             async for token in get_llm_service().stream_chat(
