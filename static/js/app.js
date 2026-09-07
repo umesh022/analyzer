@@ -219,7 +219,7 @@ function renderResults(data, fullRCA) {
       <div class="stat-label">Total Lines</div>
     </div>
     <div class="summary-stat">
-      <div class="stat-value stat-red">${summary.total_failures || 0}</div>
+      <div class="stat-value stat-red">${data.failures?.length || 0}</div>
       <div class="stat-label">Failures Found</div>
     </div>
     <div class="summary-stat">
@@ -231,6 +231,13 @@ function renderResults(data, fullRCA) {
       <div class="stat-label">RAG Used</div>
     </div>
   `;
+
+  // Show LLM pre-pass notice if applicable
+  if (data.llm_prepass_used && data.failures?.length > 0) {
+    show($('prepassNotice'));
+  } else {
+    hide($('prepassNotice'));
+  }
 
   // Failure count badge
   $('failureCount').textContent = summary.total_failures || 0;
