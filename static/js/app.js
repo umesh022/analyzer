@@ -104,8 +104,60 @@ function loadFile(file) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Sample Log
+// Streaming Analysis (SSE) — avoids 30s timeout on Render
 // ──────────────────────────────────────────────────────────────────────────
+async function analyzeViaStream(logText, fullRCA) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const res = await fetch('/api/analysis/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ log_text: logText, full_rca: fullRCA }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        return reject(new Error(err.detail || `HTTP ${res.status}`));
+      }
+
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let   buf     = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop(); // keep incomplete line
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const msg = JSON.parse(line.slice(6));
+
+            if (msg.status === 'parsed') {
+              $('statusText').textContent =
+                `Parsed: ${msg.failures_found} failures found. ${msg.message}`;
+            } else if (msg.status === 'rca_start') {
+              $('statusText').textContent = msg.message;
+            } else if (msg.status === 'error') {
+              return reject(new Error(msg.message));
+            } else if (msg.status === 'done') {
+              return resolve(msg.result);
+            }
+          } catch (_) {}
+        }
+      }
+      reject(new Error('Stream ended without result'));
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+
 function loadSampleLog() {
   const sample = `2024-01-15 10:23:40.001 [RRC] UE-12345 RRCSetupRequest sent to gNB-001
 2024-01-15 10:23:40.500 [MAC] RACH procedure started, preamble index=42
@@ -167,18 +219,8 @@ async function analyzeLog() {
       }
       data = await res.json();
     } else {
-      // ── Plain text: JSON endpoint ─────────────────────────────────────────
-      const endpoint = fullRCA ? '/api/analysis/text' : '/api/analysis/quick';
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ log_text: logText, full_rca: fullRCA }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(err.detail || `HTTP ${res.status}`);
-      }
-      data = await res.json();
+      // ── Plain text: streaming SSE endpoint (avoids 30s timeout on Render) ──
+      data = await analyzeViaStream(logText, fullRCA);
     }
 
     state.analysisResult = data;
