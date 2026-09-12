@@ -599,3 +599,214 @@ a:hover { text-decoration: underline; }
   .panel-left  { flex: none; overflow: visible; border-right: none; border-bottom: 1px solid var(--border); }
   .panel-right { flex: none; height: 60vh; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CoT (Chain-of-Thought) Components
+══════════════════════════════════════════════════════════════════════════ */
+
+/* ── CoT Selector Row ──────────────────────────────────────────────────── */
+.cot-selector-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(188,140,255,.06);
+  border: 1px solid rgba(188,140,255,.2);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+.cot-selector-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.cot-label {
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--accent-purple);
+  white-space: nowrap;
+}
+
+.cot-select {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid rgba(188,140,255,.3);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: .82rem;
+  padding: 5px 8px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .2s;
+}
+.cot-select:focus { border-color: var(--accent-purple); }
+.cot-select option { background: var(--bg-card); }
+
+.cot-btn-new, .cot-btn-view {
+  border-color: rgba(188,140,255,.35);
+  color: var(--accent-purple);
+  flex-shrink: 0;
+}
+.cot-btn-new:hover, .cot-btn-view:hover {
+  background: rgba(188,140,255,.1);
+  border-color: var(--accent-purple);
+}
+
+/* ── Active CoT Strip ──────────────────────────────────────────────────── */
+.cot-active-strip {
+  background: rgba(188,140,255,.08);
+  border: 1px solid rgba(188,140,255,.25);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: .78rem;
+  color: var(--accent-purple);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cot-active-name  { font-weight: 600; }
+.cot-active-type  { color: var(--text-muted); font-size: .74rem; }
+
+/* ── CoT Used Badge in RCA header ──────────────────────────────────────── */
+.badge-cot {
+  background: rgba(188,140,255,.15);
+  color: var(--accent-purple);
+  border: 1px solid rgba(188,140,255,.35);
+}
+
+/* ── CoT Preview Modal ─────────────────────────────────────────────────── */
+.modal-box-lg { max-width: 760px; width: 94%; }
+
+.cot-preview-header {
+  background: rgba(188,140,255,.08);
+  border: 1px solid rgba(188,140,255,.2);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.cot-preview-title { font-size: 1rem; font-weight: 700; color: var(--accent-purple); }
+.cot-preview-meta  { font-size: .78rem; color: var(--text-muted); margin-top: 4px; }
+
+.cot-call-flow {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.cot-call-flow-title {
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--accent-blue);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.cot-call-flow-item {
+  display: flex;
+  gap: 10px;
+  font-size: .8rem;
+  color: var(--text-secondary);
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.cot-call-flow-item:last-child { border-bottom: none; }
+.cot-flow-num {
+  color: var(--accent-blue);
+  font-weight: 600;
+  min-width: 20px;
+  font-family: var(--font-mono);
+}
+
+.cot-step-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-purple);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.cot-step-num     { font-size: .7rem; color: var(--accent-purple); font-weight: 700;
+                    text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+.cot-step-title   { font-size: .9rem; font-weight: 600; margin-bottom: 6px; }
+.cot-step-spec    { font-size: .75rem; font-family: var(--font-mono);
+                    color: var(--accent-blue); margin-bottom: 6px; }
+.cot-step-inst    { font-size: .82rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 6px; }
+.cot-step-look    { font-size: .75rem; color: var(--text-muted); }
+.cot-step-look strong { color: var(--accent-yellow); }
+
+.cot-fail-seq {
+  background: rgba(248,81,73,.05);
+  border: 1px solid rgba(248,81,73,.2);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-top: 12px;
+  font-size: .8rem;
+  color: var(--text-secondary);
+}
+.cot-fail-seq-title { font-weight: 600; color: var(--accent-red); margin-bottom: 6px; font-size: .78rem; }
+.cot-fail-seq-item  { display: flex; gap: 8px; padding: 2px 0; }
+.cot-fail-seq-arrow { color: var(--accent-red); }
+
+/* ── CoT Create Form ───────────────────────────────────────────────────── */
+.cot-form { display: flex; flex-direction: column; gap: 14px; }
+
+.form-row   { display: flex; flex-direction: column; gap: 5px; }
+.form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.form-label {
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.form-hint { font-weight: 400; font-size: .72rem; color: var(--text-muted); }
+
+.form-input, .form-textarea, .form-select {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: .84rem;
+  padding: 8px 10px;
+  outline: none;
+  transition: border-color .2s;
+  width: 100%;
+}
+.form-textarea { resize: vertical; min-height: 80px; line-height: 1.5; font-family: var(--font-mono); }
+.form-input:focus, .form-textarea:focus, .form-select:focus { border-color: var(--accent-purple); }
+.form-input::placeholder, .form-textarea::placeholder { color: var(--text-muted); }
+
+/* ── CoT Step Builder ──────────────────────────────────────────────────── */
+.cot-step-builder {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 8px;
+  position: relative;
+}
+.cot-step-builder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.cot-step-builder-num {
+  font-size: .8rem;
+  font-weight: 700;
+  color: var(--accent-purple);
+  font-family: var(--font-mono);
+}
+.cot-step-fields { display: flex; flex-direction: column; gap: 8px; }
+.cot-step-fields input, .cot-step-fields textarea {
+  font-size: .8rem; padding: 6px 8px;
+}
