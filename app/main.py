@@ -81,11 +81,12 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-from app.routers import analysis, chat, admin
+from app.routers import analysis, chat, admin, cot
 
 app.include_router(analysis.router)
 app.include_router(chat.router)
 app.include_router(admin.router)
+app.include_router(cot.router)
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────
