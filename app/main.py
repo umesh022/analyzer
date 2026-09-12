@@ -31,12 +31,11 @@ TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
 def _init_vector_store():
     """Load / build the RAG vector store in a background thread."""
-    kb_path     = os.getenv("KNOWLEDGE_BASE_PATH", "./knowledge_base")
-    db_path     = os.getenv("CHROMA_DB_PATH",      "./chroma_db")
-    embed_model = os.getenv("EMBED_MODEL",          "all-MiniLM-L6-v2")
+    kb_path = os.getenv("KNOWLEDGE_BASE_PATH", "./knowledge_base")
+    db_path = os.getenv("CHROMA_DB_PATH",      "./chroma_db")
     try:
         from app.rag.vector_store import get_vector_store
-        store = get_vector_store(db_path=db_path, embed_model=embed_model)
+        store = get_vector_store(db_path=db_path)
         if not store.is_populated():
             logger.info("RAG: vector store empty — ingesting knowledge base...")
             count = store.ingest_knowledge_base(kb_path)
