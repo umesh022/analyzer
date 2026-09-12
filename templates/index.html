@@ -75,6 +75,24 @@ Example:
               Full RCA (uses LLM)
             </label>
           </div>
+
+          <!-- ── CoT Template Selector ─────────────────────────────── -->
+          <div class="cot-selector-row">
+            <div class="cot-selector-wrap">
+              <span class="cot-label">🧠 CoT Template</span>
+              <select id="cotSelect" class="cot-select" onchange="onCotChange()">
+                <option value="">— None (standard RCA) —</option>
+              </select>
+            </div>
+            <button class="btn btn-xs btn-ghost cot-btn-new"
+                    onclick="openCotModal()" title="Create custom CoT template">＋ New</button>
+            <button class="btn btn-xs btn-ghost cot-btn-view" id="btnCotPreview"
+                    onclick="previewCot()" title="Preview CoT steps" style="display:none">👁 View</button>
+          </div>
+
+          <!-- Active CoT info strip -->
+          <div id="cotActiveStrip" class="cot-active-strip hidden"></div>
+
           <button class="btn btn-primary btn-lg" id="btnAnalyze" onclick="analyzeLog()">
             <span id="analyzeIcon">🔍</span>
             <span id="analyzeText">Analyze Logs</span>
@@ -132,6 +150,7 @@ Example:
         <div class="card-header">
           <span class="card-icon">📊</span>
           <span>Root Cause Analysis Report</span>
+          <span id="cotUsedBadge" class="badge badge-cot hidden">🧠 CoT guided</span>
           <div class="card-header-actions">
             <button class="btn btn-xs btn-ghost" onclick="copyRCA()">📋 Copy</button>
             <button class="btn btn-xs btn-ghost" onclick="downloadRCA()">⬇ Download</button>
@@ -257,6 +276,93 @@ Example:
 <!-- Toast notification -->
 <div id="toast" class="toast hidden"></div>
 
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MODAL: CoT Preview
+═══════════════════════════════════════════════════════════════════════════ -->
+<div id="cotPreviewModal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal('cotPreviewModal')"></div>
+  <div class="modal-box modal-box-lg">
+    <div class="modal-header">
+      <span id="cotPreviewTitle">CoT Template Preview</span>
+      <button class="modal-close" onclick="closeModal('cotPreviewModal')">✕</button>
+    </div>
+    <div class="modal-body" id="cotPreviewBody" style="max-height:70vh;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MODAL: Create / Edit CoT Template
+═══════════════════════════════════════════════════════════════════════════ -->
+<div id="cotCreateModal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal('cotCreateModal')"></div>
+  <div class="modal-box modal-box-lg">
+    <div class="modal-header">
+      🧠 Create CoT Template
+      <button class="modal-close" onclick="closeModal('cotCreateModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="cot-form">
+
+        <div class="form-row">
+          <label class="form-label">Template Name *</label>
+          <input id="cotName" class="form-input" type="text"
+                 placeholder="e.g. RLF Analysis — Custom Vendor" />
+        </div>
+
+        <div class="form-row-2">
+          <div>
+            <label class="form-label">Issue Type *</label>
+            <input id="cotIssueType" class="form-input" type="text"
+                   placeholder="e.g. RLF, Handover, Auth..." />
+          </div>
+          <div>
+            <label class="form-label">Tags (comma-separated)</label>
+            <input id="cotTags" class="form-input" type="text"
+                   placeholder="RLF, T310, SINR..." />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label class="form-label">Description</label>
+          <input id="cotDesc" class="form-input" type="text"
+                 placeholder="Brief description of when to use this template" />
+        </div>
+
+        <div class="form-row">
+          <label class="form-label">Standard Call Flow
+            <span class="form-hint">One step per line</span>
+          </label>
+          <textarea id="cotCallFlow" class="form-textarea" rows="5"
+            placeholder="UE sends RRCSetupRequest&#10;gNB responds RRCSetup&#10;UE sends RRCSetupComplete&#10;..."></textarea>
+        </div>
+
+        <div class="form-row">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <label class="form-label" style="margin:0">Analysis Steps</label>
+            <button class="btn btn-xs btn-ghost" onclick="addCotStep()">＋ Add Step</button>
+          </div>
+          <div id="cotStepsContainer"></div>
+        </div>
+
+        <div class="form-row">
+          <label class="form-label">Expected Failure Sequence
+            <span class="form-hint">One item per line</span>
+          </label>
+          <textarea id="cotFailureSeq" class="form-textarea" rows="3"
+            placeholder="T310 expiry&#10;radioLinkFailure declared&#10;RRC Re-establishment attempt&#10;..."></textarea>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+          <button class="btn btn-ghost" onclick="closeModal('cotCreateModal')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveCotTemplate()">💾 Save Template</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="/static/js/app.js"></script>
+<script src="/static/js/cot.js"></script>
 </body>
 </html>
