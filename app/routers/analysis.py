@@ -2,13 +2,14 @@
 Analysis Router
 Runs the blocking pipeline in a thread pool executor to avoid blocking
 the async event loop and hitting Render's 30-second timeout.
-Also provides a streaming SSE endpoint for progressive result delivery.
+Accepts optional cot_template_id to guide analysis with a CoT template.
 """
 
 import json
 import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -16,13 +17,13 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
-# Thread pool for CPU/blocking work (regex parsing, LLM calls via sync Groq SDK)
 _executor = ThreadPoolExecutor(max_workers=4)
 
 
 class LogTextRequest(BaseModel):
     log_text: str
     full_rca: bool = True
+    cot_template_id: Optional[str] = None   # ← CoT template to apply
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -31,33 +32,35 @@ class LogTextRequest(BaseModel):
 async def upload_and_analyze(
     file: UploadFile = File(...),
     full_rca: bool = Form(default=True),
+    cot_template_id: Optional[str] = Form(default=None),
 ):
-    """Upload a log file or PCAP/PCAPNG — runs pipeline in thread pool."""
     content = await file.read()
     if len(content) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large (max 20 MB)")
     filename = file.filename or "upload"
     log_text = await _decode_upload(content, filename)
-    return await _run_analysis_async(log_text, full_rca, filename=filename)
+    return await _run_analysis_async(log_text, full_rca,
+                                     filename=filename,
+                                     cot_template_id=cot_template_id)
 
 
 @router.post("/text")
 async def analyze_text(request: LogTextRequest):
-    """Analyze pasted log text — runs pipeline in thread pool."""
     if not request.log_text.strip():
         raise HTTPException(status_code=400, detail="log_text cannot be empty")
-    return await _run_analysis_async(request.log_text, request.full_rca)
+    return await _run_analysis_async(request.log_text, request.full_rca,
+                                     cot_template_id=request.cot_template_id)
 
 
 @router.post("/quick")
 async def quick_parse(request: LogTextRequest):
-    """Fast parse-only — no LLM RCA. Still runs in thread pool."""
     if not request.log_text.strip():
         raise HTTPException(status_code=400, detail="log_text cannot be empty")
     try:
         loop   = asyncio.get_event_loop()
         result = await loop.run_in_executor(
-            _executor, _sync_quick_summary, request.log_text
+            _executor,
+            lambda: _sync_quick_summary(request.log_text, request.cot_template_id)
         )
         return JSONResponse(content=result)
     except Exception as e:
@@ -67,32 +70,36 @@ async def quick_parse(request: LogTextRequest):
 
 @router.post("/stream")
 async def analyze_stream(request: LogTextRequest):
-    """
-    SSE streaming endpoint — sends progressive status updates then the
-    full result. Prevents Render 30s timeout by sending heartbeat tokens
-    while the pipeline runs.
-    """
+    """SSE streaming — sends heartbeats while pipeline runs."""
     if not request.log_text.strip():
         raise HTTPException(status_code=400, detail="log_text cannot be empty")
 
-    log_text = request.log_text
-    full_rca = request.full_rca
+    log_text        = request.log_text
+    full_rca        = request.full_rca
+    cot_template_id = request.cot_template_id
 
     async def event_gen():
-        # Immediately send a heartbeat so Render doesn't close the connection
-        yield _sse({"status": "started", "message": "Parsing log..."})
+        yield _sse({"status": "started",
+                    "message": "Parsing log...",
+                    "cot_active": bool(cot_template_id)})
 
         loop = asyncio.get_event_loop()
 
-        # Step 1 — quick parse in thread pool (fast, no LLM)
+        # Quick parse first (fast)
         try:
             quick = await loop.run_in_executor(
-                _executor, _sync_quick_summary, log_text
+                _executor,
+                lambda: _sync_quick_summary(log_text, cot_template_id)
             )
+            n = len(quick.get("failures", []))
+            cot_msg = ""
+            if quick.get("cot_template"):
+                cot_msg = f" | CoT: {quick['cot_template']['name']}"
             yield _sse({"status": "parsed",
-                        "failures_found": len(quick.get("failures", [])),
+                        "failures_found": n,
                         "layers": quick.get("layers_found", []),
-                        "message": f"Found {len(quick.get('failures', []))} failure points. Generating RCA..."})
+                        "cot_template": quick.get("cot_template"),
+                        "message": f"Found {n} failure points.{cot_msg} Generating RCA..."})
         except Exception as e:
             yield _sse({"status": "error", "message": str(e)})
             return
@@ -102,12 +109,14 @@ async def analyze_stream(request: LogTextRequest):
             yield _sse({"status": "done", "result": quick})
             return
 
-        # Step 2 — full RCA in thread pool (slow, LLM calls)
+        cot_hint = f" with CoT '{quick['cot_template']['name']}'" \
+                   if quick.get("cot_template") else ""
         yield _sse({"status": "rca_start",
-                    "message": "Running LLM analysis (this may take 20-40s)..."})
+                    "message": f"Running LLM RCA{cot_hint} (20-40s)..."})
         try:
             result = await loop.run_in_executor(
-                _executor, _sync_full_pipeline, log_text
+                _executor,
+                lambda: _sync_full_pipeline(log_text, cot_template_id)
             )
             result["filename"] = "input"
             yield _sse({"status": "done", "result": result})
@@ -122,16 +131,19 @@ async def analyze_stream(request: LogTextRequest):
     )
 
 
-# ── Sync workers (run inside thread pool) ─────────────────────────────────────
+# ── Sync workers ──────────────────────────────────────────────────────────────
 
-def _sync_full_pipeline(log_text: str) -> dict:
+def _sync_full_pipeline(log_text: str,
+                        cot_template_id: Optional[str] = None) -> dict:
     from app.services.analysis_pipeline import get_pipeline
-    return get_pipeline().run(log_text)
+    return get_pipeline().run(log_text, cot_template_id=cot_template_id)
 
 
-def _sync_quick_summary(log_text: str) -> dict:
+def _sync_quick_summary(log_text: str,
+                        cot_template_id: Optional[str] = None) -> dict:
     from app.services.analysis_pipeline import get_pipeline
-    return get_pipeline().get_quick_summary(log_text)
+    return get_pipeline().get_quick_summary(log_text,
+                                            cot_template_id=cot_template_id)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -145,11 +157,9 @@ async def _decode_upload(content: bytes, filename: str) -> str:
     is_pcap_ext = fname_lower.endswith(".pcap") or fname_lower.endswith(".pcapng")
     from app.parsers.pcap_parser import is_pcap, parse_pcap
     if is_pcap_ext or is_pcap(content):
-        logger.info(f"PCAP: {filename} ({len(content)} bytes)")
         try:
             loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(_executor,
-                                              parse_pcap, content)
+            return await loop.run_in_executor(_executor, parse_pcap, content)
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"PCAP parse error: {e}")
     try:
@@ -159,12 +169,14 @@ async def _decode_upload(content: bytes, filename: str) -> str:
 
 
 async def _run_analysis_async(log_text: str, full_rca: bool,
-                               filename: str = "input") -> JSONResponse:
-    """Run the pipeline in a thread pool and return a JSONResponse."""
+                               filename: str = "input",
+                               cot_template_id: Optional[str] = None) -> JSONResponse:
     try:
         loop = asyncio.get_event_loop()
-        fn   = _sync_full_pipeline if full_rca else _sync_quick_summary
-        result = await loop.run_in_executor(_executor, fn, log_text)
+        fn   = (lambda: _sync_full_pipeline(log_text, cot_template_id)) \
+               if full_rca else \
+               (lambda: _sync_quick_summary(log_text, cot_template_id))
+        result = await loop.run_in_executor(_executor, fn)
         result["filename"] = filename
         return JSONResponse(content=result)
     except Exception as e:
