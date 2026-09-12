@@ -1,0 +1,347 @@
+[
+  {
+    "id": "rlf_analysis",
+    "name": "Radio Link Failure (RLF) Analysis",
+    "issue_type": "RLF",
+    "description": "Step-by-step RLF root cause analysis following 3GPP TS 38.331 Sec 5.3.10",
+    "tags": ["RLF", "RRC", "T310", "N310", "SINR"],
+    "call_flow": [
+      "UE measures N310 consecutive out-of-sync indications from physical layer",
+      "UE starts timer T310 (default 1000ms)",
+      "If N311 in-sync indications received before T310 expiry → RLF cancelled",
+      "T310 expires → UE declares Radio Link Failure",
+      "UE initiates RRC Re-establishment (TS 38.331 Sec 5.3.7)",
+      "UE searches for suitable cell within T311",
+      "If suitable cell found → RRCReestablishmentRequest sent",
+      "gNB accepts → RRCReestablishment + RRCReestablishmentComplete",
+      "If no suitable cell or T311 expires → UE moves to RRC_IDLE"
+    ],
+    "analysis_steps": [
+      {
+        "step": 1,
+        "title": "Identify RLF trigger",
+        "instruction": "Find the T310 expiry or N310 counter in the log. Note exact timestamp and UE ID. Check if T310 value matches network configuration (default 1000ms per TS 38.331).",
+        "spec_ref": "TS 38.331 Sec 5.3.10.3",
+        "what_to_look_for": ["T310 expiry", "N310 out-of-sync", "radioLinkFailure", "OOS indications"]
+      },
+      {
+        "step": 2,
+        "title": "Check physical layer indicators",
+        "instruction": "Look for RSRP/RSRQ/SINR measurements before the RLF. RSRP < -110 dBm or SINR < -3 dB typically precedes RLF. Check HARQ failure rate — maxRetxThreshold reached indicates sustained poor channel.",
+        "spec_ref": "TS 38.133 Sec 7 / TS 38.321 Sec 5.4",
+        "what_to_look_for": ["RSRP", "RSRQ", "SINR", "HARQ retx", "maxRetxThreshold", "CQI drop"]
+      },
+      {
+        "step": 3,
+        "title": "Analyse re-establishment outcome",
+        "instruction": "Did re-establishment succeed or fail? If RRCReestablishmentReject: check if UE context was available at target cell. If T311 expired: check if coverage gap exists. Note shortMAC-I mismatch indicates security context issue.",
+        "spec_ref": "TS 38.331 Sec 5.3.7",
+        "what_to_look_for": ["RRCReestablishmentRequest", "RRCReestablishment", "RRCReestablishmentReject", "T311", "shortMAC-I"]
+      },
+      {
+        "step": 4,
+        "title": "Determine root cause category",
+        "instruction": "Classify the RLF: (a) Coverage hole — RSRP consistently below threshold; (b) Interference — SINR drop with adequate RSRP; (c) Handover miss — RLF shortly after HO preparation; (d) Timer misconfiguration — T310/N310/N311 values inappropriate for mobility; (e) UE power issue.",
+        "spec_ref": "TS 38.331 Sec 5.3.10 / TS 38.300 Sec 9.2",
+        "what_to_look_for": ["RSRP trend", "SINR trend", "handover attempts", "T310 value", "mobility pattern"]
+      },
+      {
+        "step": 5,
+        "title": "Corrective actions",
+        "instruction": "Based on root cause: Coverage → site survey, tilt adjustment, add small cell. Interference → PCI planning, power control. HO miss → reduce A3 offset or TTT. Timer → tune T310/N310/N311 per TS 38.331 recommendations.",
+        "spec_ref": "TS 38.331 Sec 5.3.10 / TS 38.300 Sec 9",
+        "what_to_look_for": ["A3 offset", "TTT", "neighbor list", "coverage measurements"]
+      }
+    ],
+    "expected_failure_sequence": ["N310 out-of-sync", "T310 start", "T310 expiry", "radioLinkFailure", "RRCReestablishmentRequest", "outcome"],
+    "is_builtin": true,
+    "created_at": "2026-09-01T00:00:00Z"
+  },
+  {
+    "id": "handover_failure",
+    "name": "Handover Failure Analysis",
+    "issue_type": "Handover",
+    "description": "Intra/inter-gNB handover failure analysis per TS 38.331 and TS 38.413",
+    "tags": ["HO", "Handover", "T304", "A3", "NGAP", "Xn"],
+    "call_flow": [
+      "UE sends MeasurementReport (A3/A5 event triggered)",
+      "Source gNB makes HO decision",
+      "Source gNB sends XnAP/NGAP:HandoverRequest to target",
+      "Target allocates resources → HandoverRequestAcknowledge",
+      "Source sends RRCReconfiguration with mobilityControlInfo to UE",
+      "UE starts T304 timer and attempts sync to target cell",
+      "UE completes RACH on target cell → T304 stops",
+      "UE sends RRCReconfigurationComplete to target gNB",
+      "Target sends XnAP/NGAP:HandoverNotify to source",
+      "Source releases UE context",
+      "FAILURE PATH: T304 expiry → UE initiates RRC re-establishment (cause=handoverFailure)"
+    ],
+    "analysis_steps": [
+      {
+        "step": 1,
+        "title": "Identify handover trigger",
+        "instruction": "Find MeasurementReport in log. Note A3/A5 event, serving and neighbour RSRP values, offset and TTT used. Check if measurement was triggered correctly per configured thresholds.",
+        "spec_ref": "TS 38.331 Sec 5.5.4 / Sec 5.5.5",
+        "what_to_look_for": ["MeasurementReport", "A3 event", "A5 event", "RSRP serving", "RSRP neighbour", "offset", "TTT"]
+      },
+      {
+        "step": 2,
+        "title": "Check HO preparation phase",
+        "instruction": "Was HandoverRequest sent to target? Did target acknowledge? Look for HandoverPreparationFailure — check cause (targetNotAllowed, noRadioResourcesAvailable). Check if target cell was in neighbour list.",
+        "spec_ref": "TS 38.413 Sec 8.4.1 / XnAP TS 38.423",
+        "what_to_look_for": ["HandoverRequired", "HandoverRequest", "HandoverRequestAcknowledge", "HandoverPreparationFailure", "cause"]
+      },
+      {
+        "step": 3,
+        "title": "Check HO execution phase",
+        "instruction": "Was RRCReconfiguration sent? Did UE start T304? T304 expiry means UE could not synchronise to target. Check target cell frequency, SSB beam, or RACH configuration mismatch.",
+        "spec_ref": "TS 38.331 Sec 5.3.5.3",
+        "what_to_look_for": ["RRCReconfiguration", "mobilityControlInfo", "T304", "T304 expiry", "targetCellId", "RACH on target"]
+      },
+      {
+        "step": 4,
+        "title": "Classify failure type",
+        "instruction": "Too-late HO: RLF before/during HO execution — reduce A3 offset or TTT. Too-early HO: re-establishment on source after HO — increase A3 offset. Wrong cell: re-establishment on third cell — fix neighbour list (ANR). Target load rejection: HandoverPreparationFailure noResources — load balancing.",
+        "spec_ref": "TS 38.331 Sec 5.5.4 / TS 36.300 Sec 22.2",
+        "what_to_look_for": ["re-establishment cause", "re-establishment cell", "time between HO and RLF"]
+      },
+      {
+        "step": 5,
+        "title": "Corrective actions",
+        "instruction": "Too-late: decrease A3 offset by 2-3 dB or decrease TTT. Too-early: increase A3 offset or TTT. Wrong cell: update ANR, check neighbour PCIs. Preparation failure: verify target cell config, check X2/Xn interface, load balance. T304 expiry: check target SSB periodicity, PRACH config, frequency offset.",
+        "spec_ref": "TS 38.331 Sec 5.5.4.1 / TS 38.413 Sec 8.4",
+        "what_to_look_for": ["A3 offset value", "TTT value", "neighbour cell config", "target PRACH config"]
+      }
+    ],
+    "expected_failure_sequence": ["MeasurementReport", "HandoverRequired", "HandoverRequest", "T304 start", "T304 expiry / RACHfail", "RRCReestablishment cause=handoverFailure"],
+    "is_builtin": true,
+    "created_at": "2026-09-01T00:00:00Z"
+  },
+  {
+    "id": "rach_failure",
+    "name": "RACH Failure Analysis",
+    "issue_type": "RACH",
+    "description": "Random Access Channel failure analysis per TS 38.321 Sec 5.1",
+    "tags": ["RACH", "MAC", "preamble", "RAR", "Msg2", "Msg4"],
+    "call_flow": [
+      "UE selects preamble index from PRACH configuration",
+      "UE transmits Msg1 (preamble) on PRACH",
+      "gNB detects preamble → sends Msg2 (RAR) in RA-RNTI window",
+      "UE receives RAR within ra-ResponseWindow → Msg3 (RRCSetupRequest) sent",
+      "gNB sends Msg4 (contention resolution / RRCSetup)",
+      "FAILURE: preamble not detected or RAR window missed → UE retransmits",
+      "preambleTransMax reached → RACH failure declared → RRC notified"
+    ],
+    "analysis_steps": [
+      {
+        "step": 1,
+        "title": "Identify RACH failure point",
+        "instruction": "Find preambleTransMax reached in log. Count total preamble attempts. Note which message was missing: if no Msg2 → coverage/PRACH config issue; if Msg2 received but no Msg4 → contention resolution failure.",
+        "spec_ref": "TS 38.321 Sec 5.1.4",
+        "what_to_look_for": ["preambleTransMax", "RACH failure", "no RAR", "no Msg2", "contention resolution failure"]
+      },
+      {
+        "step": 2,
+        "title": "Check PRACH configuration",
+        "instruction": "Verify PRACH format, periodicity, and occasion. Check if UE is using correct SSB-to-PRACH mapping. For NR: verify SSB beam sweeping and RACH occasion alignment. Check ra-ResponseWindow duration — if too short, RAR may be missed in poor channels.",
+        "spec_ref": "TS 38.321 Sec 5.1 / TS 38.211 Sec 6.3.3",
+        "what_to_look_for": ["PRACH format", "ra-ResponseWindow", "SSB index", "RACH occasion", "preamble index"]
+      },
+      {
+        "step": 3,
+        "title": "Check radio conditions",
+        "instruction": "Was RSRP adequate for RACH? RSRP < -120 dBm suggests coverage boundary. Check if RACH failure occurred during mobility (handover) — different failure cause than idle-mode RACH. Check if preamble power ramping was applied (powerRampingStep).",
+        "spec_ref": "TS 38.321 Sec 5.1.3 / TS 38.133",
+        "what_to_look_for": ["RSRP at RACH", "power ramping", "powerRampingStep", "preamble power", "cell edge"]
+      },
+      {
+        "step": 4,
+        "title": "Determine root cause",
+        "instruction": "Classify: (a) Coverage — RSRP too low, increase power or add site; (b) PRACH config mismatch — verify ssb-PerRACH-OccasionAndCBPreamblesPerSSB; (c) Congestion — many UEs attempting RACH, check RACH load and back-off; (d) Handover RACH — T304 target cell RACH config issue.",
+        "spec_ref": "TS 38.321 Sec 5.1 / TS 38.331 Sec 6.3.2",
+        "what_to_look_for": ["RACH load", "back-off indicator", "multiple UE RACH", "contention"]
+      },
+      {
+        "step": 5,
+        "title": "Corrective actions",
+        "instruction": "Coverage: increase PRACH transmit power or cell coverage. Config: align ssb-PerRACH-OccasionAndCBPreamblesPerSSB with SSB beam config. Congestion: tune preambleTransMax, backOffIndicator, increase RACH occasions. Handover: verify target PRACH config matches UE capability.",
+        "spec_ref": "TS 38.321 Sec 5.1 / TS 38.331 Sec 6.3.2",
+        "what_to_look_for": ["preambleTransMax value", "backOffIndicator", "RACH occasions count"]
+      }
+    ],
+    "expected_failure_sequence": ["Msg1 (preamble tx)", "no Msg2 (RAR timeout)", "preamble retransmission x N", "preambleTransMax reached", "RACH failure → RRC notified"],
+    "is_builtin": true,
+    "created_at": "2026-09-01T00:00:00Z"
+  },
+  {
+    "id": "nas_auth_failure",
+    "name": "NAS Authentication Failure Analysis",
+    "issue_type": "Authentication",
+    "description": "5GS/EPS NAS authentication failure analysis per TS 24.501 Sec 5.4.1",
+    "tags": ["NAS", "Authentication", "AUSF", "AMF", "USIM", "SQN", "MAC"],
+    "call_flow": [
+      "AMF initiates authentication: sends Authentication Request (RAND, AUTN, ngKSI)",
+      "UE USIM verifies AUTN using shared key K",
+      "USIM checks SQN (sequence number) — if out of range → Synchronisation Failure",
+      "USIM computes RES* and verifies MAC in AUTN",
+      "If MAC mismatch → Authentication Failure (cause: MAC failure)",
+      "UE sends Authentication Failure to AMF",
+      "AMF/AUSF handles failure: may retry or reject registration",
+      "After N failures → Registration Reject (cause: illegal UE or authentication failure)"
+    ],
+    "analysis_steps": [
+      {
+        "step": 1,
+        "title": "Identify auth failure type",
+        "instruction": "Find Authentication Failure message in log. Check the cause: MAC failure (AUTN verification failed — key mismatch) vs. Synch failure (SQN out of range — counter desynchronisation). These have different root causes and fixes.",
+        "spec_ref": "TS 24.501 Sec 5.4.1.3 / TS 33.501 Sec 6.1",
+        "what_to_look_for": ["Authentication Failure", "MAC failure", "synch failure", "cause", "AUTN", "RAND"]
+      },
+      {
+        "step": 2,
+        "title": "Check SQN synchronisation (if synch failure)",
+        "instruction": "Synch failure means UE SQN counter is ahead of or behind the HSS/AUSF counter. UE sends AUTS in Authentication Failure for re-synchronisation. Check if this is a first occurrence or repeated — repeated synch failures indicate USIM clone or HSS counter reset.",
+        "spec_ref": "TS 33.501 Sec 6.1.4 / TS 24.501 Sec 5.4.1.3.4",
+        "what_to_look_for": ["AUTS", "SQN", "re-synchronisation", "repeated auth failure", "USIM"]
+      },
+      {
+        "step": 3,
+        "title": "Check key derivation (if MAC failure)",
+        "instruction": "MAC failure means the computed MAC in AUTN does not match what USIM expected. Check: correct IMSI/subscription in HSS, correct Ki provisioned in USIM and HSS, AMF/AUSF correctly handling NAS security. Check if failure follows a network migration or HSS update.",
+        "spec_ref": "TS 33.501 Sec 6.1.3 / TS 24.501 Sec 5.4.1.3.2",
+        "what_to_look_for": ["Ki mismatch", "IMSI", "HSS provisioning", "AMF key", "AUSF key", "network migration"]
+      },
+      {
+        "step": 4,
+        "title": "Check downstream impact",
+        "instruction": "How many times did auth fail? After 3 consecutive failures, AMF should reject with cause #3 (illegal UE) per TS 24.501. Check if UE entered barred state or if T3520 is running. Check if registration eventually succeeded on retry.",
+        "spec_ref": "TS 24.501 Sec 5.4.1.3.7",
+        "what_to_look_for": ["Registration Reject", "cause #3", "T3520", "retry count", "barred"]
+      },
+      {
+        "step": 5,
+        "title": "Corrective actions",
+        "instruction": "MAC failure: re-provision USIM/HSS with correct Ki, verify AMF/AUSF config. Synch failure: allow AUTS re-sync to complete; if persistent — replace USIM or reset HSS SQN. General: check HSS/UDM-AUSF connectivity, verify IMSI is correctly provisioned.",
+        "spec_ref": "TS 33.501 Sec 6.1 / TS 24.501 Sec 5.4.1",
+        "what_to_look_for": ["USIM provisioning", "HSS config", "AUSF connectivity", "IMSI format"]
+      }
+    ],
+    "expected_failure_sequence": ["Authentication Request (AMF→UE)", "Authentication Failure (UE→AMF, cause=MAC/synch)", "optional AUTS for re-sync", "Registration Reject or retry"],
+    "is_builtin": true,
+    "created_at": "2026-09-01T00:00:00Z"
+  },
+  {
+    "id": "pdu_session_failure",
+    "name": "PDU Session Establishment Failure",
+    "issue_type": "PDU Session",
+    "description": "5GS PDU session failure analysis per TS 24.501 Sec 6.4.1 and TS 23.502",
+    "tags": ["PDU Session", "SMF", "UPF", "DNN", "NAS", "5GSM", "QoS"],
+    "call_flow": [
+      "UE sends PDU Session Establishment Request (DNN, S-NSSAI, PDU type)",
+      "AMF selects SMF based on DNN/S-NSSAI",
+      "AMF sends Nsmf_PDUSession_CreateSMContext to SMF",
+      "SMF verifies subscription (UDM), selects UPF",
+      "SMF performs PCF policy association (if required)",
+      "SMF sends N1 SM container (PDU Session Establishment Accept) via AMF",
+      "AMF sends NAS with PDU Session Establishment Accept to UE",
+      "gNB establishes PDU session resource (NGAP PDUSessionResourceSetupRequest)",
+      "FAILURE PATH: SMF rejects → PDU Session Establishment Reject sent to UE"
+    ],
+    "analysis_steps": [
+      {
+        "step": 1,
+        "title": "Identify failure cause code",
+        "instruction": "Find PDU Session Establishment Reject in log. Extract the 5GSM cause code: #8 (operator barring), #26 (insufficient resources), #27 (unknown DNN), #28 (unknown PDU type), #29 (auth failed), #38 (network failure). Each has a distinct root cause.",
+        "spec_ref": "TS 24.501 Sec 6.4.1.3 Table 9.11.4.2.1",
+        "what_to_look_for": ["PDU Session Establishment Reject", "5GSM cause", "cause #27", "cause #26", "cause #29", "cause #38"]
+      },
+      {
+        "step": 2,
+        "title": "Check DNN/APN configuration (cause #27)",
+        "instruction": "Unknown DNN means SMF could not find the requested DNN in subscriber profile or local config. Verify: DNN is provisioned in UDM/HSS, AMF DNN selection config, SMF DNN profile, UPF N4 session for this DNN. Check DNN spelling — case sensitive.",
+        "spec_ref": "TS 23.502 Sec 4.3.2 / TS 24.501 Sec 6.4.1",
+        "what_to_look_for": ["DNN", "APN", "subscriber profile", "SMF config", "UDM profile", "S-NSSAI"]
+      },
+      {
+        "step": 3,
+        "title": "Check resource availability (cause #26)",
+        "instruction": "Insufficient resources: UPF could not allocate QoS flow or IP address. Check: IP pool exhaustion (DHCP/IPAM), UPF capacity, GBR admission control for QCI/5QI. Check if specific bearer type (GBR) was requested vs. available capacity.",
+        "spec_ref": "TS 23.501 Sec 5.7 / TS 29.244",
+        "what_to_look_for": ["IP allocation", "IP pool", "UPF capacity", "GBR", "QoS flow", "5QI"]
+      },
+      {
+        "step": 4,
+        "title": "Check NGAP resource setup",
+        "instruction": "Even if NAS accepts, NGAP PDUSessionResourceSetup may fail at gNB. Check PDUSessionResourceSetupFailure cause. Verify: QoS parameters are supported by gNB, SDAP/PDCP configuration, DRB mapping, N3 tunnel establishment between gNB and UPF.",
+        "spec_ref": "TS 38.413 Sec 8.2 / TS 38.300 Sec 9",
+        "what_to_look_for": ["PDUSessionResourceSetupFailure", "NGAP cause", "DRB setup", "N3 tunnel", "QFI mapping"]
+      },
+      {
+        "step": 5,
+        "title": "Corrective actions",
+        "instruction": "DNN unknown: provision DNN in UDM, verify SMF DNN config. Resources: expand IP pool, increase UPF capacity, check GBR admission config. Auth failure: verify SMF-UDM authentication, check PCF policy. Network failure: check SMF-UPF N4 interface, SMF-AMF N11 interface connectivity.",
+        "spec_ref": "TS 23.502 Sec 4.3.2 / TS 29.244 / TS 24.501 Sec 6.4.1",
+        "what_to_look_for": ["N4 interface", "N11 interface", "UDM connectivity", "PCF policy", "IP pool size"]
+      }
+    ],
+    "expected_failure_sequence": ["PDU Session Establishment Request", "SMF selection (AMF)", "SMF processing", "PDU Session Establishment Reject (cause code)", "T3580/T3396 timer start"],
+    "is_builtin": true,
+    "created_at": "2026-09-01T00:00:00Z"
+  },
+  {
+    "id": "ngap_setup_failure",
+    "name": "NG Setup / NGAP Failure Analysis",
+    "issue_type": "NGAP",
+    "description": "NG interface setup and NGAP procedure failure analysis per TS 38.413",
+    "tags": ["NGAP", "NG Setup", "AMF", "gNB", "InitialContextSetup", "UEContextRelease"],
+    "call_flow": [
+      "gNB sends NGSetupRequest to AMF (PLMNs, TACs, slice support)",
+      "AMF responds NGSetupResponse or NGSetupFailure",
+      "UE attaches → AMF sends InitialContextSetupRequest to gNB",
+      "gNB sets up security, SRBs, DRBs → InitialContextSetupResponse",
+      "Data flows via PDU session resources",
+      "FAILURE: InitialContextSetupFailure / UEContextReleaseRequest",
+      "AMF sends UEContextReleaseCommand → gNB releases and responds UEContextReleaseComplete"
+    ],
+    "analysis_steps": [
+      {
+        "step": 1,
+        "title": "Identify NGAP failure procedure",
+        "instruction": "Determine which NGAP procedure failed: NGSetup, InitialContextSetup, HandoverPreparation, PDUSessionResourceSetup, or UEContextRelease with unexpected cause. Check procedure code and failure cause value.",
+        "spec_ref": "TS 38.413 Sec 8",
+        "what_to_look_for": ["NGSetupFailure", "InitialContextSetupFailure", "HandoverPreparationFailure", "cause", "procedure code"]
+      },
+      {
+        "step": 2,
+        "title": "Check NG interface connectivity",
+        "instruction": "Verify gNB-AMF SCTP association is up. Check PLMN and TAC in NGSetupRequest match AMF config. Verify AMF capacity (max UEs). Check if AMF returned overload indication. Verify TLS certificates if used.",
+        "spec_ref": "TS 38.413 Sec 8.7 / TS 38.472",
+        "what_to_look_for": ["SCTP", "PLMN", "TAC", "AMF capacity", "overload", "NGSetupFailure cause"]
+      },
+      {
+        "step": 3,
+        "title": "Analyse InitialContextSetup failure",
+        "instruction": "InitialContextSetupFailure: check cause (radioNetwork/unspecified, radioNetwork/encryption-not-supported, nas/authentication-failure). Verify UE security capabilities match gNB supported algorithms. Check if NAS message in context setup was valid.",
+        "spec_ref": "TS 38.413 Sec 8.3.1",
+        "what_to_look_for": ["InitialContextSetupFailure", "cause radioNetwork", "security algorithms", "NAS PDU", "UE capability"]
+      },
+      {
+        "step": 4,
+        "title": "Check UE context release causes",
+        "instruction": "UEContextRelease with cause radio-connection-with-ue-lost = RLF on gNB side. nas/normal-release = intentional by NAS. nas/authentication-failure = auth failed after context setup. handover-cancelled = HO was aborted. Each needs different follow-up.",
+        "spec_ref": "TS 38.413 Sec 8.3.2 / Sec 8.3.3",
+        "what_to_look_for": ["UEContextReleaseRequest", "cause", "radio-connection-with-ue-lost", "normal-release", "handover-cancelled"]
+      },
+      {
+        "step": 5,
+        "title": "Corrective actions",
+        "instruction": "NGSetup failure: fix PLMN/TAC mismatch, check AMF connectivity, verify SCTP ports. InitialContext failure: align security algorithm config between gNB and core. Context release RLF: correlate with RRC RLF logs, investigate radio. Handover cancelled: check T304/preparation timers.",
+        "spec_ref": "TS 38.413 / TS 38.331 / TS 38.472",
+        "what_to_look_for": ["PLMN config", "TAC config", "SCTP config", "security config", "handover timers"]
+      }
+    ],
+    "expected_failure_sequence": ["NGSetupRequest → NGSetupResponse/Failure", "InitialContextSetupRequest", "InitialContextSetupResponse/Failure", "UEContextReleaseRequest/Command"],
+    "is_builtin": true,
+    "created_at": "2026-09-01T00:00:00Z"
+  }
+]
