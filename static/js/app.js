@@ -106,13 +106,17 @@ function loadFile(file) {
 // ──────────────────────────────────────────────────────────────────────────
 // Streaming Analysis (SSE) — avoids 30s timeout on Render
 // ──────────────────────────────────────────────────────────────────────────
-async function analyzeViaStream(logText, fullRCA) {
+async function analyzeViaStream(logText, fullRCA, cotTemplateId = null) {
   return new Promise(async (resolve, reject) => {
     try {
       const res = await fetch('/api/analysis/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ log_text: logText, full_rca: fullRCA }),
+        body: JSON.stringify({
+          log_text: logText,
+          full_rca: fullRCA,
+          cot_template_id: cotTemplateId || null,
+        }),
       });
 
       if (!res.ok) {
@@ -220,9 +224,9 @@ async function analyzeLog() {
       data = await res.json();
     } else {
       // ── Plain text: streaming SSE endpoint (avoids 30s timeout on Render) ──
-      data = await analyzeViaStream(logText, fullRCA);
+      const cotId = $('cotSelect') ? ($('cotSelect').value || null) : null;
+      data = await analyzeViaStream(logText, fullRCA, cotId);
     }
-
     state.analysisResult = data;
     // For PCAP, the parsed log text comes back in rca_report preamble; store what we have
     state.currentLogText = hasPcap
@@ -279,6 +283,17 @@ function renderResults(data, fullRCA) {
     show($('prepassNotice'));
   } else {
     hide($('prepassNotice'));
+  }
+
+  // CoT badge in RCA header
+  const cotBadge = $('cotUsedBadge');
+  if (cotBadge) {
+    if (data.cot_template) {
+      cotBadge.textContent = `🧠 CoT: ${data.cot_template.name}`;
+      show(cotBadge);
+    } else {
+      hide(cotBadge);
+    }
   }
 
   // Failure count badge
